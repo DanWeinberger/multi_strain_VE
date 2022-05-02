@@ -1,0 +1,121 @@
+---
+title: "simulations"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+source('./R/sim.func.rate.R')
+source('./R/mod.func.R')
+
+```
+
+Generate cases and control with different VEs
+```{r}
+test.vax.irr <- c(0.2, 0.4, 0.6, 0.8, 1.0)
+
+all.pops <- lapply(test.vax.irr,sim.func.rate) 
+
+combine_pop <- dplyr::bind_rows(all.pops)
+```
+
+Run model on each dataset individually
+```{r}
+
+t(sapply(all.pops, mod.func))
+```
+
+OR same model on combined dataset
+```{r}
+mod.res1 <- mod.func(combine_pop)
+mod.res1
+```
+
+
+
+In more complicated case, we could have a very large number of categories,  each with a different vax.irr, which depends on distance
+```{r}
+test.irr <- seq(from=0.05, to=0.95, by=0.01)
+
+many.pops <- lapply(test.irr,sim.func.rate)
+```
+
+```{r}
+mod.res.many <- t(sapply(many.pops,mod.func ))
+```
+
+```{r}
+plot(mod.res.many[,1], mod.res.many[,2])
+```
+
+```{r}
+many.pops.combined <- dplyr::bind_rows(many.pops)
+mod.res2 <- mod.func(many.pops.combined)
+mod.res2
+```
+try a model with interaction of ditsance and vax effect--does not work well.
+```{r}
+
+#for controls, assume distance= ave distance of cases
+many.pops.combined$dist.impute <- many.pops.combined$dist
+#assgn ave distance among unvaccinated cases to the controls
+
+
+many.pops.combined$dist.impute[many.pops.combined$y==0] <- mean(many.pops.combined$dist[many.pops.combined$y==1 & many.pops.combined$vax==0])
+
+mod2 <- glm(case ~ vax*dist.impute, family='binomial', data=many.pops.combined)
+
+summary(mod2)
+
+exp(mod2$coefficients['vax'] + mod2$coefficients['vax:dist.impute']*0.05)
+
+exp(mod2$coefficients['vax'] + mod2$coefficients['vax:dist.impute']*0.95)
+```
+
+
+#vax as a predictor of case status and as a predictor of distance among the vaccinated, similar to ginny's approach
+
+```{r}
+mod2 <- glm(case ~ vax, family='binomial', data=many.pops.combined)
+
+mod3 <- mgcv::gam(vax ~ s(dist), family='binomial', data=many.pops.combined[many.pops.combined$case==1,])
+
+summary(mod3)
+
+plot(mod3, ylab='proportion vaccinated', xlab='Distance from vaccine strain', bty='l')
+
+pred.vax <- predict(mod3, type='response')
+```
+
+```{r}
+#for controls:
+#Set to observed values
+many.pops.combined$pred.vax[many.pops.combined$case==0] <- many.pops.combined$vax[many.pops.combined$case==0] # for controls use observed vaccine status
+#many.pops.combined$pred.vax[many.pops.combined$y==0] <- many.pops.combined$vax[many.pops.combined$y==0] # for controls use observed vaccine status
+
+ave.effect.vax <- exp(coef(mod2)['vax']) #average effect of vaccination comparing cases and test negative controls; 
+#represent all circulating strains regardless of distance/avrage distance
+range.prop.vax <- range(pred.vax) #estimated proportion vaccinated by distance
+#when dist=0
+mean.prop.vax=mean(pred.vax)
+range.prop.vax.ctr <- range.prop.vax- mean.prop.vax
+exp(coef(mod2)['vax'] + range.prop.vax.ctr) 
+
+```
+
+## Zero-inflated beta regression (Ginny's approach)
+```{r}
+#install.packages('zoib')
+library(zoib)
+
+eg1.fixed <- zoib(case ~ 1+ vax | 1 |1+vax, data = many.pops.combined, joint = FALSE,
+random = 0,  zero.inflation = TRUE,
+one.inflation = FALSE, n.iter = 1050, n.thin = 5, n.burn = 50)
+
+sample1 <- eg.fixed$coeff
+# check convergence of the MCMC chains
+traceplot(sample1); autocorr.plot(sample2); gelman.diag(sample1)
+```
+
+
+
