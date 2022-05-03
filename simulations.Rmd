@@ -7,7 +7,14 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 source('./R/sim.func.rate.R')
 source('./R/mod.func.R')
+source('./R/jags_mod1.R')
+source('./R/call_jags.R')
+source('./R/process_jags.R')
 
+library(dplyr)
+library(reshape2)
+library(rjags)
+library(HDInterval)
 ```
 
 Generate cases and control with different VEs
@@ -38,7 +45,11 @@ In more complicated case, we could have a very large number of categories,  each
 test.irr <- seq(from=0.05, to=0.95, by=0.01)
 
 many.pops <- lapply(test.irr,sim.func.rate)
+
+many.pops.combined <- dplyr::bind_rows(many.pops)
+
 ```
+
 
 ```{r}
 mod.res.many <- t(sapply(many.pops,mod.func ))
@@ -47,9 +58,59 @@ mod.res.many <- t(sapply(many.pops,mod.func ))
 ```{r}
 plot(mod.res.many[,1], mod.res.many[,2])
 ```
+## Multinomial JAGS model
+
+Categorize case by distance.
+```{r}
+str(many.pops.combined)
+
+many.pops.combined$dist_category <- NA
+
+many.pops.combined$dist_category[many.pops.combined$dist>0 & many.pops.combined$dist <= 0.1] <- 1
+
+many.pops.combined$dist_category[many.pops.combined$dist>0.1 & many.pops.combined$dist <= 0.2] <- 2
+
+many.pops.combined$dist_category[many.pops.combined$dist>0.2 & many.pops.combined$dist <= 0.3] <- 3
+
+many.pops.combined$dist_category[many.pops.combined$dist>0.3 & many.pops.combined$dist <= 0.4] <- 4
+
+many.pops.combined$dist_category[many.pops.combined$dist>0.4 & many.pops.combined$dist <= 0.5] <- 5
+
+many.pops.combined$dist_category[many.pops.combined$dist>0.5 & many.pops.combined$dist <= 0.6] <- 6
+
+many.pops.combined$dist_category[many.pops.combined$dist>0.6 & many.pops.combined$dist <= 0.7] <- 7
+
+many.pops.combined$dist_category[many.pops.combined$dist>0.7 & many.pops.combined$dist <= 0.8] <- 8
+
+many.pops.combined$dist_category[many.pops.combined$dist>0.8 & many.pops.combined$dist <= 0.9] <- 9
+
+many.pops.combined$dist_category[many.pops.combined$dist>0.9 & many.pops.combined$dist <= 1.0] <- 10
+
+many.pops.combined$dist_category[many.pops.combined$case==0] <- 11  #CONTROLS
+
+cat.pop1 <- many.pops.combined %>%
+  group_by(vax,dist_category) %>%
+  summarize(N_people = n())
+
+cat.pop1.m <- 
+  reshape2::melt(cat.pop1, id.vars=c('vax','dist_category'))
+
+cat.pop1.c <- 
+  reshape2::dcast(cat.pop1.m, dist_category ~ vax)
+
+names(cat.pop1.c) <-
+  c('dist_category','unvax','vax')
+
+```
 
 ```{r}
-many.pops.combined <- dplyr::bind_rows(many.pops)
+jags_mod1 <- call_jags(set.mod=jags_mod1)
+
+jags_mod1_post <- process_jags(jags_mod1)
+```
+
+
+```{r}
 mod.res2 <- mod.func(many.pops.combined)
 mod.res2
 ```
@@ -95,26 +156,53 @@ many.pops.combined$pred.vax[many.pops.combined$case==0] <- many.pops.combined$va
 
 ave.effect.vax <- exp(coef(mod2)['vax']) #average effect of vaccination comparing cases and test negative controls; 
 #represent all circulating strains regardless of distance/avrage distance
+
 range.prop.vax <- range(pred.vax) #estimated proportion vaccinated by distance
 #when dist=0
 mean.prop.vax=mean(pred.vax)
+
 range.prop.vax.ctr <- range.prop.vax- mean.prop.vax
+
 exp(coef(mod2)['vax'] + range.prop.vax.ctr) 
 
 ```
 
 ## Zero-inflated beta regression (Ginny's approach)
+First try beta regression on case
+```{r}
+install.packages('betareg')
+library(betareg)
+
+mod.br <- betareg(dist ~ vax,                  data=many.pops.combined[many.pops.combined$case==1,])
+
+summary(mod.br)
+
+#need to apply ilogit to fitted values to get distance
+ilogit <- function(x){
+  exp(x)/(1+exp(x))
+}
+p1 <- ilogit(mod.br$coefficients$mean[1])
+
+p2 <- ilogit(sum(mod.br$coefficients$mean))
+```
+
+
+```{r}
+
+
+```
+
 ```{r}
 #install.packages('zoib')
-library(zoib)
-
-eg1.fixed <- zoib(case ~ 1+ vax | 1 |1+vax, data = many.pops.combined, joint = FALSE,
-random = 0,  zero.inflation = TRUE,
-one.inflation = FALSE, n.iter = 1050, n.thin = 5, n.burn = 50)
-
-sample1 <- eg.fixed$coeff
-# check convergence of the MCMC chains
-traceplot(sample1); autocorr.plot(sample2); gelman.diag(sample1)
+# library(zoib)
+# 
+# eg1.fixed <- zoib(case ~ 1+ vax | 1 |1+vax, data = many.pops.combined, joint = FALSE,
+# random = 0,  zero.inflation = TRUE,
+# one.inflation = FALSE, n.iter = 1050, n.thin = 5, n.burn = 50)
+# 
+# sample1 <- eg.fixed$coeff
+# # check convergence of the MCMC chains
+# traceplot(sample1); autocorr.plot(sample2); gelman.diag(sample1)
 ```
 
 
