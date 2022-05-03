@@ -8,7 +8,7 @@ sim.func.rate <- function(vax.irr=0.4,prop.vax=0.8, p.case=0.1,p.control=0.3, n.
   log_pi_case <- log(p.case) + vax*log(vax.irr)
   pi_case <- exp(log_pi_case)
   
-  dist= 1 - (vax.irr) #for simulation, assume linear inverse relationship between genertic distance and IRR (perfect match=highest VE=smallest IRR)
+  dist= vax.irr  
   
   y.full_case <- rbinom(n.people,1,pi_case)
 
@@ -22,6 +22,8 @@ sim.func.rate <- function(vax.irr=0.4,prop.vax=0.8, p.case=0.1,p.control=0.3, n.
   
   ds <- dplyr::bind_rows( y.case, y.control)
 
-  ds$dist <- 1-vax.irr
+  ds$dist <- vax.irr #for simulation, assume linear  relationship between genertic distance and IRR (perfect match=distance=0=highest VE=smallest IRR)
+  
+  ds$dist[ds$case==0] <- NA
     return(ds)
 }

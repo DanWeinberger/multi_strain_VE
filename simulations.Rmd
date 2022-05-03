@@ -18,6 +18,7 @@ library(dplyr)
 library(reshape2)
 library(rjags)
 library(HDInterval)
+library(pbapply)
 ```
 
 Generate cases and control with different VEs
@@ -47,7 +48,7 @@ In more complicated case, we could have a very large number of categories,  each
 ```{r}
 test.irr <- seq(from=0.05, to=0.95, by=0.01)
 
-many.pops <- lapply(test.irr,sim.func.rate)
+many.pops <- pblapply(test.irr,sim.func.rate)
 
 many.pops.combined <- dplyr::bind_rows(many.pops)
 
@@ -55,11 +56,12 @@ many.pops.combined <- dplyr::bind_rows(many.pops)
 
 
 ```{r}
-mod.res.many <- t(sapply(many.pops,mod.func ))
+mod.res.many <- t(pbsapply(many.pops,mod.func ))
 ```
 
 ```{r}
-plot(mod.res.many[,1], mod.res.many[,2])
+plot(mod.res.many[,1], mod.res.many[,2], xlab='IRR', ylab='dist')
+abline(a=0, b=1)
 ```
 ## Multinomial JAGS model
 
@@ -69,7 +71,7 @@ str(many.pops.combined)
 
 many.pops.combined$dist_category <- NA
 
-many.pops.combined$dist_category[many.pops.combined$dist>0 & many.pops.combined$dist <= 0.1] <- 1
+many.pops.combined$dist_category[many.pops.combined$dist>=0 & many.pops.combined$dist <= 0.1] <- 1
 
 many.pops.combined$dist_category[many.pops.combined$dist>0.1 & many.pops.combined$dist <= 0.2] <- 2
 
@@ -103,119 +105,27 @@ cat.pop1.c <-
 
 ```
 
-```{r}
+```{r, eval=F}
 mod1 <- call_jags(set.mod=jags_mod1)
 
 jags_mod1_post <- process_jags(mod1)
+jags_mod1_post
 ```
 
 Impose a random walk structure on the effect of vaccination by distance
-```{r}
+```{r, eval=F}
 mod2 <- call_jags(set.mod=jags_mod2)
 
 jags_mod2_post <- process_jags(mod2)
 ```
 
-AR(1) random slope and explicitly incorporate genetic distance
+AR(1) random slope and explicitly incorporate genetic distance. eac category gives effect VS REFERENCE not vs the next category
 
 ```{r}
 mod3 <- call_jags(set.mod=jags_mod3, distvar=cat.pop1.c[,1,2], keep.parms=c('overall_vax_effect','sero_vax_effect','rho','beta1','delta0','delta1'))
 
 jags_mod3_post <- process_jags(mod3)
-```
-
-
-
-
-try a model with interaction of ditsance and vax effect--does not work well.
-```{r}
-
-#for controls, assume distance= ave distance of cases
-many.pops.combined$dist.impute <- many.pops.combined$dist
-#assgn ave distance among unvaccinated cases to the controls
-
-
-many.pops.combined$dist.impute[many.pops.combined$y==0] <- mean(many.pops.combined$dist[many.pops.combined$y==1 & many.pops.combined$vax==0])
-
-mod2 <- glm(case ~ vax*dist.impute, family='binomial', data=many.pops.combined)
-
-summary(mod2)
-
-exp(mod2$coefficients['vax'] + mod2$coefficients['vax:dist.impute']*0.05)
-
-exp(mod2$coefficients['vax'] + mod2$coefficients['vax:dist.impute']*0.95)
-```
-
-
-#vax as a predictor of case status and as a predictor of distance among the vaccinated, similar to ginny's approach
-
-```{r}
-mod2 <- glm(case ~ vax, family='binomial', data=many.pops.combined)
-
-mod3 <- mgcv::gam(vax ~ s(dist), family='binomial', data=many.pops.combined[many.pops.combined$case==1,])
-
-summary(mod3)
-
-plot(mod3, ylab='proportion vaccinated', xlab='Distance from vaccine strain', bty='l')
-
-pred.vax <- predict(mod3, type='response')
-```
-
-```{r}
-#for controls:
-#Set to observed values
-many.pops.combined$pred.vax[many.pops.combined$case==0] <- many.pops.combined$vax[many.pops.combined$case==0] # for controls use observed vaccine status
-#many.pops.combined$pred.vax[many.pops.combined$y==0] <- many.pops.combined$vax[many.pops.combined$y==0] # for controls use observed vaccine status
-
-ave.effect.vax <- exp(coef(mod2)['vax']) #average effect of vaccination comparing cases and test negative controls; 
-#represent all circulating strains regardless of distance/avrage distance
-
-range.prop.vax <- range(pred.vax) #estimated proportion vaccinated by distance
-#when dist=0
-mean.prop.vax=mean(pred.vax)
-
-range.prop.vax.ctr <- range.prop.vax- mean.prop.vax
-
-exp(coef(mod2)['vax'] + range.prop.vax.ctr) 
-
-```
-
-## Zero-inflated beta regression (Ginny's approach)
-First try beta regression on case
-```{r}
-install.packages('betareg')
-library(betareg)
-
-mod.br <- betareg(dist ~ vax,                  data=many.pops.combined[many.pops.combined$case==1,])
-
-summary(mod.br)
-
-#need to apply ilogit to fitted values to get distance
-ilogit <- function(x){
-  exp(x)/(1+exp(x))
-}
-p1 <- ilogit(mod.br$coefficients$mean[1])
-
-p2 <- ilogit(sum(mod.br$coefficients$mean))
-```
-
-
-```{r}
-
-
-```
-
-```{r}
-#install.packages('zoib')
-# library(zoib)
-# 
-# eg1.fixed <- zoib(case ~ 1+ vax | 1 |1+vax, data = many.pops.combined, joint = FALSE,
-# random = 0,  zero.inflation = TRUE,
-# one.inflation = FALSE, n.iter = 1050, n.thin = 5, n.burn = 50)
-# 
-# sample1 <- eg.fixed$coeff
-# # check convergence of the MCMC chains
-# traceplot(sample1); autocorr.plot(sample2); gelman.diag(sample1)
+jags_mod3_post
 ```
 
 
