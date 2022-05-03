@@ -8,6 +8,9 @@ knitr::opts_chunk$set(echo = TRUE)
 source('./R/sim.func.rate.R')
 source('./R/mod.func.R')
 source('./R/jags_mod1.R')
+source('./R/jags_mod2.R')
+source('./R/jags_mod3.R')
+
 source('./R/call_jags.R')
 source('./R/process_jags.R')
 
@@ -90,30 +93,40 @@ many.pops.combined$dist_category[many.pops.combined$case==0] <- 11  #CONTROLS
 
 cat.pop1 <- many.pops.combined %>%
   group_by(vax,dist_category) %>%
-  summarize(N_people = n())
+  summarize(N_people = n(), ave_dist=mean(dist))
 
 cat.pop1.m <- 
   reshape2::melt(cat.pop1, id.vars=c('vax','dist_category'))
 
 cat.pop1.c <- 
-  reshape2::dcast(cat.pop1.m, dist_category ~ vax)
-
-names(cat.pop1.c) <-
-  c('dist_category','unvax','vax')
+  reshape2::acast(cat.pop1.m, dist_category ~ vax ~variable)
 
 ```
 
 ```{r}
-jags_mod1 <- call_jags(set.mod=jags_mod1)
+mod1 <- call_jags(set.mod=jags_mod1)
 
-jags_mod1_post <- process_jags(jags_mod1)
+jags_mod1_post <- process_jags(mod1)
 ```
 
+Impose a random walk structure on the effect of vaccination by distance
+```{r}
+mod2 <- call_jags(set.mod=jags_mod2)
+
+jags_mod2_post <- process_jags(mod2)
+```
+
+AR(1) random slope and explicitly incorporate genetic distance
 
 ```{r}
-mod.res2 <- mod.func(many.pops.combined)
-mod.res2
+mod3 <- call_jags(set.mod=jags_mod3, distvar=cat.pop1.c[,1,2], keep.parms=c('overall_vax_effect','sero_vax_effect','rho','beta1','delta0','delta1'))
+
+jags_mod3_post <- process_jags(mod3)
 ```
+
+
+
+
 try a model with interaction of ditsance and vax effect--does not work well.
 ```{r}
 

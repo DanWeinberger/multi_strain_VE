@@ -1,4 +1,6 @@
-call_jags <- function(set.mod=jags_mod1, y=cat.pop1.c[,-1],n.burn=10000, n.samples=20000){
+call_jags <- function(set.mod, y=cat.pop1.c[,,1],n.burn=10000, n.samples=20000, distvar=NULL,
+                      keep.parms=c('overall_vax_effect',
+                                                                                               'sero_vax_effect')){
 
 m <- apply(y,2, sum)
   
@@ -13,18 +15,18 @@ inits3=list(".RNG.seed"=c(789), ".RNG.name"='base::Wichmann-Hill')
 ##############################################
 #Model Organization
 ##############################################
-model_spec<-textConnection(jags_mod1)
+model_spec<-textConnection(set.mod)
 model_jags<-jags.model(model_spec, 
                        inits=list(inits1,inits2, inits3),
                        data=list('y' = y,
                                  'm' = m,
+                                 'dist'=distvar,
                                  'N_cats'=nrow(y),
                                  'vax' = c(0,1)),
                        n.adapt=n.burn, 
                        n.chains=3)
 
-params<-c('overall_vax_effect',
-          'sero_vax_effect')
+params<-c(keep.parms)
 
 ##############################################
 #Posterior Sampling
