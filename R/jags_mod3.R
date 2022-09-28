@@ -25,21 +25,27 @@ for(j in 1:(N_cats-1)){
 beta0[j] ~ dnorm(mu_beta0, inv_var_beta0)
 }
 
-beta1[1] <- delta0 #effect of vax for smallest dist category
-delta1[1] <- 0
+beta1[1] ~ dnorm(0, 0.0001) #effect of vax for smallest dist category
+
+delta1[1] <- dnorm(0, (1-rho1^2)*tau1)
 
 for(j in 2:(N_cats-1)){
-  beta1[j] <- delta0 + delta1[j]*dist[j]
-  delta1[j] <- rho*delta1[j-1] + phi_delta1
-}
-phi_delta1 ~ dnorm(0,inv_var_phi_delta1)
+  beta1[j] <-   delta1[j]*dist[j]
+  
+  delta1[j] ~ dnorm( rho1*delta1[j-1] , tau1) 
 
-rho ~ dunif(0,1)
-delta0 ~ dnorm(0, 0.0001)
+}
+
+
+
+rho1 ~ dunif(0,1)
+tau1~ dgamma(3,2)
+
 mu_beta0 ~ dnorm(0, 0.0001)
 mu_beta1 ~ dnorm(0, 0.0001)
+
 inv_var_beta0 ~ dgamma(0.01, 0.01)
-inv_var_phi_delta1 ~ dgamma(0.01, 0.01)
+
 #Overall Vaccine Effect
 overall_vax_effect <- 100*(1 - (1 - p[N_cats,2])/(1 - p[N_cats,1]))
 }
