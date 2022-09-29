@@ -115,7 +115,7 @@ jags_mod1_post <- process_jags(mod1)
 jags_mod1_post
 ```
 
-Impose an AR(1) structure on the effect of vaccination by distance
+Impose an AR(1) structure on the effect of vaccination by distance--assumes distances between groups are equally spaced
 ```{r, eval=F}
 mod2 <- call_jags(set.mod=jags_mod1a)
 
@@ -123,14 +123,9 @@ jags_mod2_post <- process_jags(mod2)
 jags_mod2_post
 ```
 
-AR(1) random slope and explicitly incorporate genetic distance. eac category gives effect VS REFERENCE not vs the next category
-
-```{r}
-# mod3 <- call_jags(set.mod=jags_mod3, distvar=cat.pop1.c[,1,2], keep.parms=c('overall_vax_effect','sero_vax_effect','rho','beta1','delta0','delta1'))
-# 
-# jags_mod3_post <- process_jags(mod3)
-# jags_mod3_post
-```
-
-
+## Spatial approach
+-Better would be to use the pairwise distances between isolates or groupings. In this case, beta0 and beta1 would have some
+type of spatial prior
+-if using individual-level data we could incorporate GWAS-type approach 
+-Problems: How do we deal with bias from past exposure (which affects unvaccinated more?)can we use some sort of latent variable, that accounts for time since vaccination, maybe serotsurvey data? Or in analysis somehow ensure we are comparing variants nearby in time to each other
 
